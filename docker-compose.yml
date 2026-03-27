@@ -1,0 +1,146 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    platform: ${POSTGRES_PLATFORM:-linux/amd64}
+    container_name: vyrus-postgres
+    environment:
+      POSTGRES_DB: vyrus
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    networks:
+      - vyrus-net
+
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    container_name: vyrus-prefect-server
+    depends_on:
+      - postgres
+    environment:
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/vyrus
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+    command: prefect server start --host 0.0.0.0 --port 4200
+    ports:
+      - "${PREFECT_HOST_PORT:-4201}:4200"
+    networks:
+      - vyrus-net
+
+  prefect-worker:
+    build:
+      context: ./pipeline
+      dockerfile: Dockerfile
+    container_name: vyrus-prefect-worker
+    depends_on:
+      - prefect-server
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PYTHONPATH: /app:/app/pipeline
+    working_dir: /app/pipeline
+    command: prefect worker start --pool default-agent-pool
+    networks:
+      - vyrus-net
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: vyrus-mlflow
+    depends_on:
+      - postgres
+    command: >-
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+      --allowed-hosts *
+      --cors-allowed-origins *
+    volumes:
+      - mlflow-artifacts:/mlflow/artifacts
+    ports:
+      - "${MLFLOW_HOST_PORT:-5001}:5000"
+    networks:
+      - vyrus-net
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: vyrus-fastapi
+    depends_on:
+      - postgres
+      - prefect-server
+      - mlflow
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PREFECT_API_URL: ${PREFECT_API_URL}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+      CLOUDFLARE_R2_ACCOUNT_ID: ${CLOUDFLARE_R2_ACCOUNT_ID}
+      CLOUDFLARE_R2_ACCESS_KEY: ${CLOUDFLARE_R2_ACCESS_KEY}
+      CLOUDFLARE_R2_SECRET_KEY: ${CLOUDFLARE_R2_SECRET_KEY}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-vyrus-internal-secret-change-me}
+      PYTHONPATH: /app:/app/ml
+    volumes:
+      - ./ml:/app/ml:ro
+      - ./data:/app/data:ro
+    ports:
+      - "${FASTAPI_HOST_PORT:-8001}:8000"
+    networks:
+      - vyrus-net
+
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    container_name: vyrus-ml
+    depends_on:
+      - postgres
+      - mlflow
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      FLOOD_LABELS_CSV_PATH: /app/data/indofloods_labels.csv
+      PYTHONPATH: /app:/app/ml:/app/scripts
+    volumes:
+      - ./ml:/app/ml
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+    working_dir: /app/ml
+    command: sh -lc "sleep infinity"
+    networks:
+      - vyrus-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vyrus-frontend
+    depends_on:
+      - fastapi
+    ports:
+      - "${FRONTEND_HOST_PORT:-3001}:80"
+    networks:
+      - vyrus-net
+
+  pg-tileserv:
+    image: pramsey/pg_tileserv:latest
+    container_name: vyrus-pg-tileserv
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vyrus
+    ports:
+      - "${PG_TILESERV_HOST_PORT:-7801}:7800"
+    networks:
+      - vyrus-net
+
+networks:
+  vyrus-net:
+    name: vyrus-net
+    driver: bridge
+
+volumes:
+  postgres-data:
+  mlflow-artifacts:

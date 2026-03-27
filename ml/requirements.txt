@@ -1,0 +1,17 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+lightgbm>=4.5.0
+xgboost>=2.1.3
+torch==2.9.0+cpu
+scikit-learn>=1.5.2
+shap>=0.46.0
+imbalanced-learn>=0.12.4
+mlflow>=2.18.0
+pandas>=2.2.3
+numpy>=2.1.3
+scipy>=1.14.1
+geopandas>=1.0.1
+xarray>=2024.10.0
+netCDF4>=1.7.2
+tqdm>=4.67.1
+psycopg[binary]>=3.2.3
+joblib>=1.4.2

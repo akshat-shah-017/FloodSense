@@ -1,0 +1,46 @@
+# macOS / OS
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+frontend/.env
+backend/.env
+ml/.env
+pipeline/.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# ML / data artifacts
+mlruns/
+artifacts/
+models/
+checkpoints/
+*.pt
+*.pth
+*.joblib
+*.pkl
+data/
+
+# Docker / local state
+*.log
+postgres-data/
